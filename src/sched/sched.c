@@ -56,7 +56,6 @@ int rtai_proc_lxrt_register(void);
 void rtai_proc_lxrt_unregister(void);
 
 #include <rtai.h>
-#include <rtai_defs.h>
 #include <asm/rtai_sched.h>
 #include <rtai_lxrt.h>
 #include <rtai_registry.h>
@@ -2036,11 +2035,6 @@ static int PROC_READ_FUN(rtai_read_sched)
 	PROC_PRINT_VARS;
 
 	PROC_PRINT("\nRTAI LXRT Real Time Task Scheduler.\n\n");
-	PROC_PRINT("    Calibrated Time Base Frequency: %lu Hz\n", tuned.clock_freq);
-	PROC_PRINT("    Calibrated user space latency: %d ns\n", (int)rtai_imuldiv(UserLatency, 1000000000, tuned.clock_freq));
-	PROC_PRINT("    Calibrated kernel space latency: %d ns\n", (int)rtai_imuldiv(KernelLatency, 1000000000, tuned.clock_freq));
-	PROC_PRINT("    Calibrated oneshot timer setup_to_firing time: %d ns\n\n",
-                  (int)rtai_imuldiv(tuned.setup_time_TIMER_CPUNIT, 1000000000, tuned.clock_freq));
 	PROC_PRINT("Number of RT CPUs in system: %d (sized for %d)\n\n", num_online_cpus(), RTAI_NR_CPUS);
  
 	PROC_PRINT("\n\n");
@@ -2305,173 +2299,6 @@ static void lxrt_exit(void)
 #include <linux/init.h>
 #include <linux/kmod.h>
 
-#define CAL_WITH_KTHREAD 0
-#define MAX_LOOPS CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES
-
-static int end_kernel_lat_cal;
-
-#if 1
-#define DIAG_KF_LAT_EVAL 0
-#define SV 3163
-#define SG 1000000000
-#define R  (2*SV)
-#define Q  0
-#define P0 R
-#define ALPHA 1000100000
-#define rtai_simuldiv(s, m, d) \
-	((s) > 0 ? rtai_imuldiv((s), (m), (d)) : -rtai_imuldiv(-(s), (m), (d)))
-static void kf_lat_eval(long period)
-{
-	int loop, calok, xm;
-	int xp, xe, y, pe, pp, ppe, g, q, r;
-	RTIME start_time, resume_time;
-
-	q  = Q*Q;
-	r  = R*R;
-	xe = 0;
-	pe = P0*P0;
-	xm = 1000000000;
-
-#if DIAG_KF_LAT_EVAL
-	rt_printk("INITIAL VALUES: xe %d, pe %d, q %d, r %d.\n", xe, pe, q, r);
-#endif
-
-#if CAL_WITH_KTHREAD 
-	rt_thread_init(nam2num("KERCAL"), 0, 1, SCHED_FIFO, 0xF);
-#endif
-
-	start_time = rtai_rdtsc();
-	resume_time = start_time + 5*period;
-	rt_task_make_periodic(NULL, resume_time, period);
-	for (calok = loop = 1; loop <= MAX_LOOPS; loop++) {
-		resume_time += period;
-		if (!rt_task_wait_period()) {
-			y = (long)(rtai_rdtsc() - resume_time);
-		} else {
-			y = xe;
-		}
-		if (y < xm) xm = y;
-		xp  = xe;				 // xp = xe
-		pp  = rtai_simuldiv(pe, ALPHA, SG) + q;  // pp = ALPHA*pe + q
-		g   = rtai_simuldiv(pp, SG, pp + r);     // g = pp/(pp + r)
-		xe  = xp + rtai_simuldiv(y - xp, g, SG); // xe = xp + g*(y - xp)
-		ppe = pe;				 // ppe = pe
-		pe  = rtai_simuldiv(SG - g, pp, SG);     // pe = (1.0 - g)*pp
-
-#if DIAG_KF_LAT_EVAL
-		rt_printk("loop %d, xp %d, xe %d, y %d, pp %d, pe %d, g %d, r %d.\n", loop, xp, xe, y, pp, pe, g, r);
-#endif
-
-		if (abs(xe - xp) < abs(xe)/1000 && abs(pe - ppe) < abs(pe)/1000) {
-			if (calok++ > 250) break;
-		} else {
-			calok = 1;
-		}
-	}
-	rt_printk("KERNEL SPACE LATENCY ENDED AT CYCLE: %d, LATENCY = %d, VARIANCE = %d/%d, GAIN = %d/%d, LEAST = %d.\n", loop - 1 , xe, pe, SV*SV, g, SG, xm);
-
-	KernelLatency = CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS == 1 ? xe : (CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS == 2 ? xm : (xe + xm)/2);
-	end_kernel_lat_cal = 1;
-}
-#else
-static void kernel_lat_cal(long period)
-{
-#define WARMUP 50
-	int loop, max_overn_loop;
-	long latency, ovrns;
-	RTIME start_time, resume_time;
-
-	max_overn_loop  = 0;
-	latency = ovrns = 0;
-
-#if CAL_WITH_KTHREAD 
-	rt_thread_init(nam2num("KERCAL"), 0, 1, SCHED_FIFO, 0xF);
-#endif
-
-	start_time = rtai_rdtsc();
-	resume_time = start_time + 5*period;
-	rt_task_make_periodic(NULL, resume_time, period);
-	for (loop = 1; loop <= (MAX_LOOPS + WARMUP); loop++) {
-		resume_time += period;
-		if (!rt_task_wait_period()) {
-			latency += (long)(rtai_rdtsc() - resume_time);
-			if (loop == WARMUP) {
-				latency = 0;
-			}
-		} else {
-			ovrns++;
-			max_overn_loop = loop;
-		}
-	}
-
-	if (ovrns) {
-		printk("KERNEL SPACE CALIBRATION: OVERRUNS %ld, MAX OVERRUN LOOP %d, NUMBER OF WARMUP LOOOP %d.\n", ovrns, max_overn_loop, WARMUP);
-	}
-	KernelLatency = latency/MAX_LOOPS;
-	end_kernel_lat_cal = 1;
-}
-#endif
-
-static int recalibrate = 0;
-module_param(recalibrate, int, S_IRUGO);
-
-#define sign(i) (((i) >= 0) ? 1 : -1)
-
-static void calibrate_latencies(void)
-{
-#define NUM_ARGSIZE   15
-	char env0[] = RTAI_INSTALL_DIR"/calibration";
-	char arg0[] = RTAI_INSTALL_DIR"/calibration/calibrate";
-	char arg1[] = RTAI_INSTALL_DIR"/calibration/latencies";
-	char arg2[NUM_ARGSIZE];
-	char arg3[NUM_ARGSIZE] = "-1";
-	char *envp[] = { env0, "TERM=linux", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", NULL };
-	char *argv[] = { arg0, arg1, arg2, arg3, NULL };
-	int cpuid, period = nano2count(1000000000/CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ);
-
-	tuned.sched_latency = 0;
-	satdelay = oneshot_span;
-	for (cpuid = 0; cpuid < RTAI_NR_CPUS; cpuid++) {
-		tuned.timers_tol[cpuid] = rt_half_tick = 0;
-	}
-
-	if (!kernel_latency || !user_latency) {
-		sprintf(arg2, "%d", recalibrate ? -1 : 0);
-		printk("USERMODE CHECK: %s.\n", !call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC) ? "OK" : "ERROR");
-		printk("USERMODE CHECK PROVIDED (ns): KernelLatency %d, UserLatency %d.\n", KernelLatency > 0 ? (int)count2nano(KernelLatency) : KernelLatency, UserLatency > 0 ? (int)count2nano(UserLatency) : UserLatency);
-	}
-
-	if (kernel_latency > 0) {
-		KernelLatency = nano2count(kernel_latency);
-	} else if (KernelLatency < 0) {
-		RTIME t = rtai_rdtsc();
-#if CAL_WITH_KTHREAD 
-		rt_thread_create(kernel_lat_cal, (void *)(long)period, 0);
-		while (!end_kernel_lat_cal) msleep(100);
-#else
-		RT_TASK *task;
-		task = kmalloc(sizeof(RT_TASK), GFP_KERNEL);
-		rt_task_init(task, kf_lat_eval, period, 4096, 0, 1, 0);
-		rt_task_resume(task);
-		while (!end_kernel_lat_cal) msleep(100);
-		kfree(task);
-#endif
-		printk("AFTER KERNEL CALIBRATION (WITH %s, ns): KernelLatency %d, UserLatency %d (CALIBRATION: PERIOD %d (ns), TIME %lld (ns)).\n", CAL_WITH_KTHREAD ? "KTHREAD" : "RTAI TASK", (int)count2nano(KernelLatency), UserLatency > 0 ? (int)count2nano(UserLatency) : UserLatency, CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ, count2nano(rtai_rdtsc() - t));
-	}
-
-	if (user_latency > 0) {
-		UserLatency = nano2count(user_latency);
-	} else if (UserLatency < 0) {
-		RTIME t = rtai_rdtsc();
-		sprintf(arg2, "%d", period);
-		sprintf(arg3, "%d", KernelLatency);
-		printk("USERMODE USER SPACE CALIBRATION: %s.\n", !call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC) ? "OK" : "ERROR");
-		printk("AFTER USER CALIBRATION (ns): KernelLatency %d, UserLatency %d (CALIBRATION: PERIOD %d (ns), TIME %lld (ns)).\n", (int)count2nano(KernelLatency), (int)count2nano(UserLatency), CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ, count2nano(rtai_rdtsc() - t));
-	}
-
-	printk("FINAL CALIBRATION SUMMARY (ns): KernelLatency %d, UserLatency %d.\n", (int)count2nano(KernelLatency), (int)count2nano(UserLatency));
-}
-
 extern int rt_registry_alloc(void);
 extern void rt_registry_free(void);
 extern int kthread_server(void *);
@@ -2580,7 +2407,7 @@ static int __rtai_lxrt_init(void)
 	printk("linear timed lists.\n");
 #endif
 	printk(KERN_INFO "RTAI[sched]: Linux timer freq = %d (Hz), TimeBase freq = %lu hz.\n", HZ, (unsigned long)tuned.clock_freq);
-	printk(KERN_INFO "RTAI[sched]: timer setup = %d ns, resched latency = %d ns.\n", (int)rtai_imuldiv(tuned.setup_time_TIMER_CPUNIT, 1000000000, tuned.clock_freq), (int)rtai_imuldiv(tuned.sched_latency - tuned.setup_time_TIMER_CPUNIT, 1000000000, tuned.clock_freq));
+	printk(KERN_INFO "RTAI[sched]: timer setup = %d ns.\n", (int)rtai_imuldiv(tuned.setup_time_TIMER_CPUNIT, 1000000000, tuned.clock_freq));
 
 	kthread_server_thread = kthread_run(kthread_server, NULL, "KTHREAD_SERVER");
 
@@ -2591,7 +2418,6 @@ exit:
 	rt_linux_hrt_next_shot = _rt_linux_hrt_next_shot;
 #endif
 	rt_start_timers();
-	calibrate_latencies();
 
 	return retval;
 free_sched_ipi:

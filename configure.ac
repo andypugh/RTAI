@@ -333,51 +333,6 @@ AC_ARG_ENABLE(use-stack-args,
 	esac])
 AC_MSG_RESULT(${CONFIG_RTAI_USE_STACK_ARGS:-no})
 
-AC_MSG_CHECKING(for latency self calibration metrics)
-AC_ARG_ENABLE(self-calibration-metrics,
-	[ --enable-self-calibration-metrics	Set latency self calibration metrics],
-	[case "$enableval" in
- changequote(,)dnl
-	[1-3]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS=$enableval ;;
- changequote([,])dnl
-	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-metrics=[1-3]]) ;;
-	esac])
-if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS = x ; then
-  # Use a reasonable default if unset
-  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS=1
-fi
-AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS)
-
-AC_MSG_CHECKING(for latency self calibration freq)
-AC_ARG_ENABLE(self-calibration-freq,
-	[ --enable-self-calibration-freq		Set latency self calibration freq],
-	[case "$enableval" in
- changequote(,)dnl
-	[0-9]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ=$enableval ;;
- changequote([,])dnl
-	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-freq=<Hz>]) ;;
-	esac])
-if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ = x ; then
-  # Use a reasonable default if unset
-  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ=10000
-fi
-AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ)
-
-AC_MSG_CHECKING(for latency self calibration cycles)
-AC_ARG_ENABLE(self-calibration-cycles,
-	[ --enable-self-calibration-cycles	Set latency self calibration cycles],
-	[case "$enableval" in
- changequote(,)dnl
-	[0-9]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES=$enableval ;;
- changequote([,])dnl
-	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-cycles=<numcycles>]) ;;
-	esac])
-if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES = x ; then
-  # Use a reasonable default if unset
-  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES=$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ
-fi
-AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES)
-
 AC_MSG_CHECKING(for user busy align ret delay)
 AC_ARG_ENABLE(user-ret-delay,
 	[ --enable-user-ret-delay	Set user busy align ret delay],
@@ -449,21 +404,6 @@ AC_ARG_ENABLE(align-priority,
 	*) unset CONFIG_RTAI_ALIGN_LINUX_PRIORITY ;;
 	esac])
 AC_MSG_RESULT(${CONFIG_RTAI_ALIGN_LINUX_PRIORITY:-no})
-
-AC_MSG_CHECKING(for calibration frequency factor)
-AC_ARG_ENABLE(cal-freq-fact,
-	[ --enable-cal-freq-fact		Set calibration frequency factor],
-	[case "$enableval" in
- changequote(,)dnl
-	[0-9]*) CONFIG_RTAI_CAL_FREQS_FACT=$enableval ;;
- changequote([,])dnl
-	*) AC_MSG_ERROR([Bad argument to option: --enable-cal-freq-fact=<number>]) ;;
-	esac])
-if test x$CONFIG_RTAI_CAL_FREQS_FACT = x ; then
-	# Use a reasonable default if unset
-	CONFIG_RTAI_CAL_FREQS_FACT=0
-fi
-AC_MSG_RESULT($CONFIG_RTAI_CAL_FREQS_FACT)
 
 AC_MSG_CHECKING(for tlsf use in real-time malloc support)
 AC_ARG_ENABLE(malloc-tlsf,
@@ -651,11 +591,7 @@ test x$CONFIG_RTAI_SCHED_ISR_LOCK = xy && AC_DEFINE(CONFIG_RTAI_SCHED_ISR_LOCK,1
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_RTC_FREQ,$CONFIG_RTAI_RTC_FREQ,[Kconfig])
 test x$CONFIG_RTAI_LONG_TIMED_LIST = xy && AC_DEFINE(CONFIG_RTAI_LONG_TIMED_LIST,1,[Kconfig])
 test x$CONFIG_RTAI_USE_STACK_ARGS = xy && AC_DEFINE(CONFIG_RTAI_USE_STACK_ARGS,1,[Kconfig])
-AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS,[Kconfig])
-AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ,[Kconfig])
-AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_SCHED_LXRT_NUMSLOTS,$CONFIG_RTAI_SCHED_LXRT_NUMSLOTS,[Kconfig])
-AC_DEFINE_UNQUOTED(CONFIG_RTAI_CAL_FREQS_FACT,$CONFIG_RTAI_CAL_FREQS_FACT,[Kconfig])
 
 case $CONFIG_RTAI_MONITOR_EXECTIME in
 	y) CONFIG_RTAI_MONITOR_EXECTIME=1 ;;
@@ -820,7 +756,6 @@ AC_CONFIG_FILES([ \
 	src/include/GNUmakefile \
 	src/ipc/GNUmakefile \
 	src/sched/GNUmakefile \
-	src/include/rtai_defs.h \
 	src/include/asm-x86/GNUmakefile \
 	src/ipc/fifos/GNUmakefile \
 	src/ipc/shm/GNUmakefile \

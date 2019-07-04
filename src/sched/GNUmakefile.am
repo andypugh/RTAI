@@ -8,8 +8,6 @@
 # even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 # PARTICULAR PURPOSE.
 
-calibrationdir = $(prefix)/calibration
-
 moduledir = @RTAI_MODULE_DIR@
 
 noinst_LIBRARIES =
@@ -20,14 +18,6 @@ builtins_srclist = $(wildcard $(foreach mod,$(builtins),$(patsubst %,$(top_srcdi
 clean-local:
 	@RTAI_KBUILD_CLEAN@
 	@$(RM) -f $(foreach src,$(builtins_srclist),$(notdir $(src)))
-
-calibration_PROGRAMS = calibrate
-
-calibrate_SOURCES = calibrate.c
-calibrate_CPPFLAGS = \
-	@RTAI_USER_CFLAGS@ \
-	-I$(top_srcdir)/src/include
-calibrate_LDADD = -lpthread
 
 rtai_hal.ko: @RTAI_KBUILD_ENV@
 rtai_hal.ko: rtai_hal.c
@@ -49,17 +39,6 @@ install-exec-local: rtai_hal.ko rtai_sched.ko
 	$(mkinstalldirs) $(DESTDIR)$(moduledir)
 	$(INSTALL_DATA) $^ $(DESTDIR)$(moduledir)
 
-install-data-local:
-	$(mkinstalldirs) $(DESTDIR)$(calibrationdir) $(DESTDIR)$(bindir)
-	$(INSTALL_DATA) $(srcdir)/runinfo $(DESTDIR)$(calibrationdir)/.runinfo
-	@echo '#!/usr/bin/env bash' > $(DESTDIR)$(calibrationdir)/run
-	@echo "${DESTDIR}$(bindir)/rtai-load $(DESTDIR)$(calibrationdir)/.runinfo" >> $(DESTDIR)$(calibrationdir)/run
-	@echo "sleep 5 && sync && ${DESTDIR}$(bindir)/rtai-load cleanup" >> $(DESTDIR)$(calibrationdir)/run
-	@chmod 755 $(DESTDIR)$(calibrationdir)/run
-
-run: all
-	@$(top_srcdir)/rtai-scripts/rtai-load --verbose
-
-EXTRA_DIST = runinfo Makefile.kbuild
+EXTRA_DIST = Makefile.kbuild
 
 DISTCLEANFILES = Makefile

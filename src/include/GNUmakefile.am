@@ -44,13 +44,8 @@ install-data-local:
 distclean-local:
 	rm -f $(DESTDIR)$(includedir)/asm $(DESTDIR)$(includedir)/rtai_config.h
 
-uninstall-local: rtai_defs.h
-	rm -f rtai_defs.h
-
 FORCE:
 
 SUBDIRS = asm-x86
-
-EXTRA_DIST = rtai_defs.h.in
 
 DISTCLEANFILES = asm
