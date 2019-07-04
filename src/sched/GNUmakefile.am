@@ -19,6 +19,9 @@ clean-local:
 	@RTAI_KBUILD_CLEAN@
 	@$(RM) -f $(foreach src,$(builtins_srclist),$(notdir $(src)))
 
+distclean-local:
+	rm -rf .deps
+
 rtai_hal.ko: @RTAI_KBUILD_ENV@
 rtai_hal.ko: rtai_hal.c
 	@RTAI_KBUILD_TOP@ \
